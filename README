@@ -1,4 +1,99 @@
 ----------------------------------------------------------------------------------------------------
+scx.Set: ordered maps/sets based on red-black tree
+----------------------------------------------------------------------------------------------------
+
+typedef scx.Set(T) = scx.Map(T,T)
+typedef IntSet = Set(Int,Native)
+
+//Native field should be set to 'Native' for native data types including Null<T>
+//Any non-native object MUST have a well-founded ordering given by it's compare method
+scx.Set(T,?Native) {
+    new :: ?Iterable<T> -> Set(T)
+    
+    //set subtraction.
+    without :: Set(T) -> Set(T)
+    
+    //produces a set of disjoint overlapping subsets from the two sets
+    //for example overlap [ {a,b,c}, {a} ]
+    //produces [ {a}, {b, c} ]
+    //
+    //and also [ {a,b,c,d,e}, {a,c,d}, {a,d} ]
+    //produces [ {a,d}, {b,e}, {c} ]
+    [static] overlap :: Iterable<Set(T)> -> Iterable<Set(T)>
+    
+    //insert element (if doesn't exist already)
+    //returns true if element was inserted
+    insert :: T -> Bool
+    insert_all :: Iterable<T> -> Void
+    
+    has :: T -> Bool
+    
+    //set union
+    merge :: Set(T) -> Set(T)
+    
+    intersects :: Set(T) -> Bool //non-empty intersection test
+    copy :: Void -> Set(T)
+    
+    iterator :: Void -> Iterator<T>
+    empty :: Void -> Bool
+    size :: Void -> Int
+    
+    toString :: Void -> String
+    
+    //lexicographical ordering
+    compare :: Set(T) -> Int //{-1,0,1}
+}
+
+//U,V must be comparable/native
+scx.Pair(U,NativeU,V,NativeV) {
+    new :: U -> V -> Pair(U,V)
+    
+    //lexicographical
+    compare :: Pair(U,V) -> Int //{-1,0,1}
+}
+
+//Native field should be set to 'Native' for native key types including Null<T>
+//Any non-native object MUST have a well-founded ordering given by it's compare method
+scx.Map(Key,NativeKey,Value) {
+
+    //same methods as Set!
+    
+    //except
+    iterator :: Void -> Iterator<RBNode(Key,Value)>
+    
+    //and
+    has :: Key -> Bool
+    insert :: Key -> Value -> Bool
+    
+    get :: Key -> Null<Value>
+    set :: Key -> Value -> Void
+}
+
+scx.RBNode(Key,Value) {
+    //other values
+    
+    key   :: Key
+    value :: Value
+}
+
+----------------------------------------------------------------------------------------------------
+scx.Textual:
+----------------------------------------------------------------------------------------------------
+
+scx.Textual {
+    ARR_LIMIT : Int = 60; //max size for single array in output
+    
+    //print array representation out in source code with given map
+    array_string : Array<T> -> (?f:T->String = Std.string) -> String
+}
+
+Example:
+
+Textual.ARR_LIMIT = 2;
+trace(Textual.array_string([1,2,3,4,5], function (x:Int) return Std.string(x*2)));
+//outputs [2,4].concat([6,8]).concat([10])
+
+----------------------------------------------------------------------------------------------------
 scx.UTF: Utilities for handling Unicode strings
 ----------------------------------------------------------------------------------------------------
 
