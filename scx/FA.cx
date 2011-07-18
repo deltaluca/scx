@@ -1,0 +1,465 @@
+package util;
+
+$(import);
+
+///-------------------------------------------------------------------------------------------------
+///Requirements
+
+/// Type parameter T must model the Set/Map class.
+/// it should expose the following methods
+///
+/// has : ? -> Bool, does the set of match symbols contain the given symbol
+/// merge : T -> Void, merge the given match set with 'this' 
+/// intersects : T -> Bool, does the set of match symbols intersect 'this'
+/// T.overlap : Iterable<T> -> Array<T>, compute the disjoint overlapping subsets of the set of T's
+/// copy : Void -> T, produce a deep copy of the match set.
+///
+/// it must also be able to be stored in a Set and thus must provide a well ordering via the usual
+/// compare method:
+/// compare : T -> Int
+
+///-------------------------------------------------------------------------------------------------
+
+// Wrapped, Comparable Array class.
+$(mixin global CArray(T) CArray(T,));
+$(define global class CArray(T,Native) {
+	public var arr:Array<T>;
+	public function new(?a:Array<T>) arr = if(a==null) new Array<T>() else a
+	
+	public inline function iterator() return arr.iterator()
+	public inline function push(o:T) arr.push(o)
+	
+	public var length(get_length,never):Int;
+	public inline function get_length() return arr.length
+	
+	public inline function copy() {
+		var ret = new CArray(T)();
+		for(i in arr) ret.arr.push(i);
+		return ret;
+	}
+	
+	//lexicographical ordering.
+	public inline function compare(x:CArray(T,Native)) {
+		var ret = 0;
+		var i0 = 0; var i1 = 0;
+		while(ret==0) {
+			if     (i0 <  arr.length && i1 == x.arr.length) ret =  1;
+			else if(i0 == arr.length && i1 <  x.arr.length) ret = -1;
+			else if(i0 == arr.length && i1 == x.arr.length) break;
+			else {
+				var r0 =   arr[i0];
+				var r1 = x.arr[i1];
+			
+				if(r0==r1) ret = 0;
+				else if(r0==null && r1!=null) ret = -1;
+				else if(r1==null && r0!=null) ret =  1;
+				else {
+					$(mixin CMP_Native(a,b) (if(a<b) -1 else 1));
+					$(mixin CMP_(a,b) a.compare(b));
+					ret = CMP_`Native(r0,r1);
+				}
+				
+				i0++; i1++;
+			}
+		}
+		return ret;
+	}
+	
+	public inline function toString() return arr.toString()
+});
+
+///-------------------------------------------------------------------------------------------------
+
+//automatum arc.
+$(define global class FaBranch(T) {
+	public var match:T;
+	public var to:FaNode(T);
+	
+	public function new(match:T, to:FaNode(T)) {
+		this.match = match;
+		this.to = to;
+	}
+});
+
+//accepting attribute.
+class FaAttr {
+	static var nextId:Int = 0;
+	public var id:Int;
+	
+	public var prec:Int;
+	public var func:Dynamic->Dynamic;
+	
+	public function new(prec:Int, func:Dynamic->Dynamic) {
+		this.prec = prec;
+		this.func = func;
+		id = nextId++;
+	}
+}
+
+//automatum node. Also represents the DFA as a whole as it's entry point.
+$(define global class FaNode(T) {
+	static var nextId = 0;
+	public var id:Int;
+	
+	public var accepting:Bool;
+	public var attr:FaAttr;
+	
+	public var out:Array<FaBranch(T)>;
+	
+	public function new(accepting:Bool=false) {
+		this.accepting = accepting;
+		out = new Array<FaBranch(T)>();
+		id = nextId++;
+	}
+	
+	public inline function compare(x:FaNode(T)) return id - x.id
+	
+	public inline function toString() return Std.string(id)
+	
+	public inline function toString2() {
+		var ret = ""+id+" ";
+		if(accepting) ret += "accept "+attr;
+		for(i in out)
+			ret += "\n   "+i.match+" : "+i.to.id;
+		return ret;
+	}
+});
+$(mixin global DFA(T) FaNode(T));
+
+//NFA is represented as a single in state, and a single accepting out state.
+//only simple way to perform thompson construction.
+$(mixin global NFA(T) { _in : FaNode(T), _out : FaNode(T) });
+
+$(define global class FaUtil(T) {
+
+	///match longest matching sub'string'.
+	// type of 'str' argument is intentionaly left blank so that haxe can infer it's type
+	// correctly without needing it to be specified in the type parameters of FaUtil.
+	//
+	// It must however, be an Iterable of whatever type the alphabet T uses.
+	public static function match(dfa:DFA(T), str, ?pos:Int=0) {
+		var ite = str.iterator();
+		for(i in 0...pos) ite.next();
+		
+		var valid = false;
+		var valcnt = 0;
+		var attr = null;
+		
+		//current state
+		var cur = dfa;
+		//starting position for matched character count
+		var ipos = pos;
+		
+		while(cur != null && ite.hasNext()) {
+			//accepting state has been reached, record information and keep on searching.
+			if(cur.accepting) {
+				valid = true;
+				valcnt = pos-ipos;
+				attr = cur.attr;
+			}
+			var cval = ite.next();
+			//evaluate next state
+			var next = null;
+			for(x in cur.out) {
+				if(x.match.has(cval)) {
+					next = x.to;
+					pos++;
+					break;
+				}
+			}
+			cur = next;
+		}
+		if(cur != null && cur.accepting) {
+			valid = true;
+			valcnt = pos-ipos;
+			attr = cur.attr;
+		}
+		
+		return { valid : valid, matched : valcnt, func : if (attr!=null) attr.func else null };
+	}
+	
+	/// compute minimal dfa
+	public static function minimal(dfa:DFA(T)):DFA(T) {
+		var sets = split_states(dfa);
+		var partitions = sets.partitions;
+		
+		var proc = null;
+		proc = function (partitions:Array<Set(FaNode(T))>) {
+			var splits = false;
+			var npartitions = new Array<Set(FaNode(T))>();
+			for(S in partitions) {
+				var pathset = new Map(CArray(Set(T)), Set(FaNode(T)))();
+				for(x in S) {
+					var out = new CArray(Set(T))();
+					for(o in x.out) {
+						var to = o.to;
+						var ind = 0;
+						for(T in partitions) {
+							if(T.has(to)) {
+								if(out.arr[ind]==null) out.arr[ind] = new Set(T)();
+								out.arr[ind].insert(o.match);
+								break;
+							}
+							ind++;
+						}
+					}
+					
+					var key = out;
+					var set = pathset.get(key);
+					if(set==null) pathset.insert(key, set = new Set(FaNode(T))());
+					set.insert(x);
+				}
+				
+				var num = 0;
+				for(P in pathset) {
+					npartitions.push(P.data);
+					num++;
+				}
+				if(num > 1) splits = true;
+			}
+			
+			if(!splits) {
+				var map = new IntMap(FaNode(T))();
+				
+				var fst = -1;
+				for(P in npartitions) {
+					var node = new FaNode(T)();
+					if(fst==-1) fst = node.id;
+					node.id -= fst;
+					
+					for(x in P) {
+						map.insert(x.id, node);
+						if(x.accepting) {
+							node.accepting = true;
+							if(x.attr != null && (node.attr==null || node.attr.prec < x.attr.prec))
+								node.attr = x.attr;
+						}
+					}
+				}
+				
+				for(P in npartitions) {
+					var node = null;
+					for(x in P) {						
+						if(node==null) node = map.get(x.id);
+						for(out in x.out) {
+							var nnode = map.get(out.to.id);
+							var branch = null;
+							for(i in node.out) {
+								if(i.to.id == nnode.id) {
+									branch = i;
+									break;
+								}
+							}
+							if(branch==null) node.out.push(new FaBranch(T)(out.match,nnode));
+							else branch.match.merge(out.match);
+						}
+					}
+				}
+				
+				//retrieve entry node
+				return map.get(dfa.id);
+			}else return proc(npartitions);
+		}
+		return proc(partitions);
+	}
+	
+	/// split states into sets of accepting and non-accepting
+	// to deal with accepting attributes, there is likely more than one set of accepting states
+	// to correspond with each accepting attribute. Otherwise the DFA would be invalidated.
+	public static function split_states(dfa:DFA(T)) {
+		var parts = new IntMap(Set(FaNode(T)))();
+		var all   = new Set(FaNode(T))();
+		
+		var proc = null;
+		proc = function(x) {
+			if(!all.insert(x)) return;
+			
+			if(x.accepting) {
+				var ind = if(x.attr==null) -1 else x.attr.id;
+				var set = parts.get(ind);
+				if(set==null) parts.insert(ind, set = new Set(FaNode(T))());
+				set.insert(x);
+			}else {
+				var set = parts.get(-2);
+				if(set==null) parts.insert(-2, set = new Set(FaNode(T))());
+				set.insert(x);
+			}
+			
+			for(i in x.out) proc(i.to);
+		}
+		proc(dfa);
+		
+		var partitions = new Array<Set(FaNode(T))>();
+		for(x in parts) partitions.push(x.data);
+		
+		return { partitions : partitions, all : all };
+	}
+
+	/// nfa to dfa
+	public static inline function dfa(nfa:NFA(T)):DFA(T) {
+		var map = new Map(Set(FaNode(T)),FaNode(T))();
+		return __dfa(map, closure(new Set(FaNode(T))([nfa._in])));
+	}
+	static function __dfa(map:Map(Set(FaNode(T)),FaNode(T)), cur:Set(FaNode(T))):FaNode(T) {
+		var node = new FaNode(T)();
+		for(i in cur) {
+			if(i.accepting) {
+				node.accepting = true;
+				if(i.attr!=null && (node.attr==null || i.attr.prec > node.attr.prec))
+					node.attr = i.attr;
+			}
+		}
+		
+		map.insert(cur, node);
+		
+		for(sym in symbols(cur)) {
+			var states = closure(symbol_states(cur,sym));
+			var nnode = map.get(states); if(nnode==null) nnode = __dfa(map, states);
+			node.out.push(new FaBranch(T)(sym, nnode));
+		}
+		return node;
+	}
+	
+	/// set of nodes reachable in a single move from the set of start states through the given match
+	public static inline function symbol_states(x:Set(FaNode(T)), match:T):Set(FaNode(T)) {
+		var set = new Set(FaNode(T))();
+		for(n in x) {
+			for(y in n.out) {
+				if((y.match==null && match==null)
+				|| (y.match!=null && match!=null && y.match.intersects(match)))
+					set.insert(y.to);
+			}
+		}
+		return set;
+	}
+	
+	/// compute outgoing overlapping sets of symbols to match
+	public static inline function symbols(x:Set(FaNode(T))):Array<T> {
+		var sets = new Set(T)();
+		for(n in x) {
+			for(y in n.out) {
+				if(y.match != null)
+					sets.insert(y.match);
+			}
+		}
+		return T.overlap(cast sets);
+	}
+	
+	/// closure
+	public static inline function closure(rest:Set(FaNode(T)), ?match:T):Set(FaNode(T)) {
+		var ret = new Set(FaNode(T))();
+		var stack = new Array<FaNode(T)>();
+		
+		$(mixin eval(cur) {
+			if(!ret.insert(cur)) continue;
+			for(x in cur.out) {
+				if((x.match==null && match==null)
+				|| (x.match!=null && match!=null && x.match.intersects(match)))
+					stack.push(x.to);
+			}
+		});
+		
+		for(cur in rest) eval(cur);
+		while(stack.length>0) {
+			var cur = stack.pop();
+			eval(cur);
+		}
+		
+		return ret;
+	}
+	
+	///empty nfa
+	public static inline function empty():NFA(T) {
+		var _in = new FaNode(T)();
+		var _out = new FaNode(T)();
+		_in.out.push(new FaBranch(T)(null, _out));
+		return { _in : _in, _out : _out };
+	}
+	
+	/// nfa alternation with multiple accept states for conversion to dfa
+	public static inline function dfa_cons(list:Iterable<NFA(T)>):NFA(T) {
+		var _in = new FaNode(T)();
+		for(i in list) {
+			var x = copy(i);
+			_in.out.push(new FaBranch(T)(null, x._in));
+		}
+		return { _in : _in, _out : null };
+	}
+	
+	/// alternation
+	public static inline function bar(a:NFA(T),b:NFA(T)):NFA(T) return multi_bar([a,b])
+	public static inline function multi_bar(list:Iterable<NFA(T)>):NFA(T) {
+		var _in = new FaNode(T)();
+		var _out = new FaNode(T)(true);
+		
+		for(i in list) {
+			var x = copy(i);
+			_in.out.push(new FaBranch(T)(null, x._in));
+			x._out.accepting = false;
+			x._out.out.push(new FaBranch(T)(null, _out));
+		}
+		
+		return { _in : _in , _out : _out };
+	}
+	
+	/// concat
+	public static inline function concat(a:NFA(T),b:NFA(T)):NFA(T) {
+		a = copy(a);
+		b = copy(b);
+		a._out.accepting = false;
+		a._out.out.push(new FaBranch(T)(null, b._in));
+		return { _in : a._in, _out : b._out };
+	}
+	
+	/// ? operator
+	public static inline function maybe(a:NFA(T)):NFA(T) {
+		a = copy(a);
+		a._in.out.push(new FaBranch(T)(null, a._out));
+		return a;
+	}
+	
+	/// * operator
+	public static inline function star(a:NFA(T)):NFA(T) {
+		a = copy(a);
+		a._out.out.push(new FaBranch(T)(null, a._in));
+		a._in.out.push(new FaBranch(T)(null, a._out));
+		return a;
+	}
+	
+	/// + operator
+	public static inline function plus(a:NFA(T)):NFA(T) {
+		a = copy(a);
+		a._out.out.push(new FaBranch(T)(null, a._in));
+		return a;
+	}
+	
+	///clone an nfa object performing a deep copy
+	public static inline function copy(nfa:NFA(T)):NFA(T) {
+		var map = new Map(FaNode(T),FaNode(T))();
+		return {_in : __clone(map, nfa._in), _out : map.get(nfa._out)};
+	}
+	static function __clone(map:Map(FaNode(T),FaNode(T)), node:FaNode(T)):FaNode(T) {
+		var n2 = new FaNode(T)(node.accepting);
+		n2.attr = node.attr;
+		
+		map.insert(node,n2);
+		for(i in node.out) {
+			var n3 = map.get(i.to); if(n3==null) n3 = __clone(map,i.to);
+			n2.out.push(new FaBranch(T)(if(i.match==null) null else i.match.copy(), n3));
+		}
+		return n2;
+	}
+	
+	///simple one arc nfa
+	public static inline function nfa(match:T):NFA(T) {
+		var _in = new FaNode(T)();
+		var _out = new FaNode(T)(true);
+		_in.out.push(new FaBranch(T)(match,_out));
+		return {_in : _in, _out : _out};
+	}
+	
+	///assign attribute
+	public static inline function attribute(nfa:NFA(T), prec:Int, func:Dynamic->Dynamic) {
+		nfa._out.attr = new FaAttr(prec,func);
+	}
+});

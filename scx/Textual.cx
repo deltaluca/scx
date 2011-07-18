@@ -1,0 +1,33 @@
+package util;
+
+class Textual {
+	
+	public static var ARR_LIMIT=60;
+	
+	public static function array_string<T>(x:Iterable<T>,?f:T->String):String {
+		if(f==null) f = Std.string;
+		
+		var ret = "[";
+		var cnt = 0;
+		var rcnt = 0;
+		for(i in x) {
+			if(cnt==ARR_LIMIT) {
+				if(rcnt==0)
+					ret += "].concat([";
+				else
+					ret += "]).concat([";
+				cnt = 0;
+				rcnt++;
+			}
+			if(cnt!=0) ret += ",";
+			
+			ret += f(i);
+			
+			cnt++;
+		}
+		ret += "]";
+		if(rcnt!=0) ret += ")";
+		return ret;
+	}
+	
+}

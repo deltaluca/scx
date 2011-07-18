@@ -1,0 +1,524 @@
+package util;
+
+$(import);
+
+$(mixin BLACK 0);
+$(mixin RED 1);
+///-------------------------------------------------------------------------------------------------
+///Requirements                                                                         Requirements
+
+/// non-native key value types must define a compare function such that
+/// a < b => (a compare b) < 0
+/// a > b => (a compare b) > 0
+/// a = b => (a compare b) = 0
+
+/// furthermore the compare function must satisfy the following rules
+/// (a compare b) = 0 <=> (b compare a) = 0
+/// (a compare b) < 0 <=> (b compare a) > 0
+/// (a compare b) > 0 <=> (b compare a) < 0
+/// (a compare b) > 0 & (b compare c) > 0 => (a compare c) > 0
+/// (a compare b) < 0 & (b compare c) < 0 => (a compare c) < 0
+
+/// the rules may seem obvious but breaking them will result in incorrect behaviour.
+
+///-------------------------------------------------------------------------------------------------
+///Typedef mixins                                                                     Typedef mixins
+
+$(mixin global Map(K,T,Native) RedBlack(K,T,Native));
+$(mixin global Map(K,T) Map(K,T,));
+
+$(mixin global IntMap   (T) Map(Int,   T,Native));
+$(mixin global StringMap(T) Map(String,T,Native));
+$(mixin global FloatMap (T) Map(Float, T,Native));
+
+$(mixin global IntSet    Set(Int,   Native));
+$(mixin global StringSet Set(String,Native));
+$(mixin global FloatSet  Set(Float, Native));
+
+///-------------------------------------------------------------------------------------------------
+///tuples                                                                                     tuples
+
+$(define global class Pair(A,NA,B,NB) {
+	public var a:A;
+	public var b:B;
+	
+	public function new(a:A,b:B) {
+		this.a = a;
+		this.b = b;
+	}
+	
+	$(mixin __CMP_(a,b) (a.compare(b)));
+	$(mixin __CMP_Native(a,b) (a == b ? 0 : a > b ? 1 : -1));
+	$(mixin CMP(a,b,Native) __CMP_`Native(a,b));
+	
+	public inline function compare(x:Pair(A,B)) {
+		var ret = CMP(a,x.a,NA);
+		if(ret==0) ret = CMP(b,x.b,NB);
+		return ret;
+	}
+});
+
+///-------------------------------------------------------------------------------------------------
+///Set                                                                                           Set
+
+$(mixin global Set(T) Set(T,));
+$(define global class Set(T,Native) {
+	//internal map.
+	public var map:RedBlack(T,T,Native);
+	
+	//----------------------------------------------------------------------------------------------
+	//constructor                                                                        constructor
+	
+	public function new(?list:Iterable<T>) {
+		map = new RedBlack(T,T,Native)();
+		if(list!=null)
+			insert_all(list);
+	}
+	
+	//----------------------------------------------------------------------------------------------
+	//wrappers                                                                              wrappers
+	
+	//get seems pointless but has it's use given that 'equality' is measured by compare.
+	//can be used to retrieve 'equivalent' item from the set, not necessarly the same by equality.
+	public inline function get(x:T) return map.get(x)
+	
+	public inline function without(x:Set(T,Native)) {
+		var ret = new Set(T,Native)();
+		ret.map = map.without(x.map);
+		return ret;
+	}
+	
+	public static inline function overlap(list:Iterable<Set(T,Native)>) {
+		var arg = new Array<RedBlack(T,T,Native)>();
+		for(i in list) arg.push(i.map);
+		
+		var over = RedBlack(T,T,Native).overlap(arg);
+		
+		var ret = new Array<Set(T,Native)>();
+		for(i in over) {
+			var obj = new Set(T,Native)();
+			obj.map = i;
+			ret.push(obj);
+		}
+		return ret;
+	}
+	
+	public inline function insert_all(list:Iterable<T>) {
+		for(i in list) insert(i);
+	}
+	
+	public inline function insert(value:T) return map.insert(value,value)
+	public inline function has   (value:T) return map.has(value)
+	
+	public inline function merge     (x:Set(T,Native)) return map.merge(x.map)
+	public inline function intersects(x:Set(T,Native)) return map.intersects(x.map)
+	public inline function copy() {
+		var ret = new Set(T,Native)();
+		ret.map.merge(map);
+		return ret;
+	}
+	
+	public inline function iterator() return new RBIterator(T,T,Native,Set)(map)
+	public inline function empty() return map.empty()
+	
+	public inline function size() return map.size()
+	
+	//----------------------------------------------------------------------------------------------
+	//toString                                                                              toString
+	
+	public inline function toString() {
+		var ret = new StringBuf();
+		ret.addChar(123);
+		var fst = true;
+		RBIter(i,map,T,T,{
+			if(!fst) ret.addChar(44);
+			fst = false;
+			ret.add(i.data);
+		});
+		ret.addChar(125);
+		return ret.toString();
+	}
+	
+	public inline function compare(x:Set(T,Native)) return map.compare(x.map)
+	
+});
+
+///-------------------------------------------------------------------------------------------------
+///RedBlack Node                                                                       RedBlack Node
+
+$(define global class RBNode(K,V) {
+	public var colour:Int;
+	
+	public var left  :RBNode(K,V);
+	public var right :RBNode(K,V);
+	public var parent:RBNode(K,V);
+	
+	public var key :K;
+	public var data:V;
+	
+	public function new(?key:K, ?data:V) {
+		if(key!=null) {
+			this.key = key;
+			this.data = data;
+			colour = RED;
+		}
+	}
+	
+	public inline function clone() {
+		var ret = new RBNode(K,V)(key, data);
+		ret.colour = colour;
+		return ret;
+	}
+	
+	public inline function toString() {
+		return "{ key : "+key+", data : "+data+" }";
+	}
+});
+
+///-------------------------------------------------------------------------------------------------
+///RedBlack ordered Iterator                                               RedBlack ordered Iterator
+
+$(mixin RBIterator(K,V,Native) RBIterator(K,V,Native,));
+$(define class RBIterator(K,V,Native,Set) {
+	var cur:RBNode(K,V);
+	
+	public function new(list:RedBlack(K,V,Native)) {
+		if((cur=list.root)!=null)
+			while(cur.left!=null) cur = cur.left;
+	}
+	public inline function hasNext() return cur!=null
+	public inline function next() {
+		if(!hasNext()) return null;
+		else {
+			var x = cur;
+			if(cur.right!=null) {
+				cur = cur.right;
+				while(cur.left!=null) cur = cur.left;
+			}else {
+				while(cur.parent!=null && cur==cur.parent.right) cur = cur.parent;
+				cur = cur.parent;
+			}
+		
+			//conditionaly compiled return value so that for a set, only the value is returned
+			//for all others the node containing the key, value pair is returned.
+			$(mixin __ret_Native_Set x.data);
+			$(mixin __ret__Set       x.data);
+			$(mixin __ret_Native_    x);
+			$(mixin __ret__          x);
+			
+			return __ret_`Native`_`Set;
+		}
+	}
+});
+
+///-------------------------------------------------------------------------------------------------
+///RedBlack unordered Iterator                                           RedBlack unordered Iterator
+
+$(mixin global RBIter(i, n,K,V, closure) {
+	if(n.root!=null) {
+		var rb_stack = new Array<RBNode(K,V)>();
+		rb_stack.push(n.root);
+		while(rb_stack.length>0) {
+			var i = rb_stack.pop();
+			{
+				//locally defined mixins to allow continue break equivalent statements.
+				$(mixin rbcontinue { rbcont; continue; });
+				$(mixin rbbreak break);
+				closure;
+			}
+			$(mixin rbcont {
+				if(i.left !=null) rb_stack.push(i.left);
+				if(i.right!=null) rb_stack.push(i.right);
+			});
+			rbcont;
+		}
+	}
+});
+
+///-------------------------------------------------------------------------------------------------
+///RedBlack Tree                                                                       RedBlack Tree
+
+$(mixin global RedBlack(K,V) RedBlack(K,V,));
+$(define global class RedBlack(K,V,Native) {
+	
+	//----------------------------------------------------------------------------------------------
+	//conditionaly compiled comparison operations.                             comparison operations
+	
+	$(mixin __LT_(a,b) (a.compare(b)<0));
+	$(mixin __GT_(a,b) (a.compare(b)>0));
+	$(mixin __EQ_(a,b) (a.compare(b)==0));
+	$(mixin __CMP_(a,b) (a.compare(b)));
+	
+	$(mixin __LT_Native(a,b) (a < b));
+	$(mixin __GT_Native(a,b) (a > b));
+	$(mixin __EQ_Native(a,b) (a == b));
+	$(mixin __CMP_Native(a,b) (a == b ? 0 : a > b ? 1 : -1));
+	
+	$(mixin LT(a,b) __LT_`Native(a,b));
+	$(mixin GT(a,b) __GT_`Native(a,b));
+	$(mixin EQ(a,b) __EQ_`Native(a,b));
+	$(mixin NE(a,b) (!EQ(a,b)));
+	$(mixin CMP(a,b) __CMP_`Native(a,b));
+	
+	//----------------------------------------------------------------------------------------------
+	//root + constructor                                                          root + constructor
+	
+	public var root:RBNode(K,V);
+	public function new(?list:Iterable<{key:K,value:V}>) {
+		_size = 0;
+		if(list!=null) insert_all(list);
+	}
+	
+	var _size:Int;
+	public inline function size() return _size
+	
+	//----------------------------------------------------------------------------------------------
+	//iterators                                                                            iterators
+	
+	//ordered haXe iterator over nodes.
+	public inline function iterator() return new RBIterator(K,V,Native)(this)
+	
+	//mixin for unordered stack based iteration over redblack tree.
+	$(mixin RBIter(i,x,closure) RBIter(i,x,K,V,closure));
+	
+	//----------------------------------------------------------------------------------------------
+	
+	public inline function without(x:RedBlack(K,V,Native)) {
+		var ret = new RedBlack(K,V,Native)();
+		RBIter(i,this, {
+			if(!x.has(i.key)) ret.insert(i.key,i.data);
+		});
+		return ret;
+	}
+	
+	//----------------------------------------------------------------------------------------------
+	
+	//lexicographical ordering.
+	public inline function compare(x:RedBlack(K,V,Native)) {
+		var ia = iterator();
+		var ib = x.iterator();
+		
+		var ret = 0;
+		while(ret==0) {
+			if(ia.hasNext() && !ib.hasNext()) ret = 1;
+			else if(ib.hasNext() && !ia.hasNext()) ret = -1;
+			else if(!ia.hasNext() && !ib.hasNext()) break;
+			else {
+				var a = ia.next().key;
+				var b = ib.next().key;
+				ret = CMP(a,b);
+			}
+		}
+		return ret;
+	}
+	
+	//----------------------------------------------------------------------------------------------
+	//set operations                                                                  set operations
+	
+	static public function overlap(list:Iterable<RedBlack(K,V,Native)>) {
+		var sets = Lambda.array(list);
+		var unioned = new RedBlack(K,V,Native)();
+		for(N in sets) unioned.merge(N);
+		
+		if(sets.length>16) {
+			//give up!
+			
+			var ret = new Array<RedBlack(K,V,Native)>();
+			for(i in unioned) {
+				var rb = new RedBlack(K,V,Native)();
+				rb.insert(i.key,i.data);
+				ret.push(rb);
+			}
+			return ret;
+			
+		}else {
+			var union = Lambda.array(cast unioned);
+			
+			var map = new Map(K,Array<Bool>,Native)();
+			for(cur in union) {
+				var mapping = new Array<Bool>();
+				for(i in 0...sets.length) mapping.push(false);
+				map.insert(cur.key, mapping);
+			}
+			
+			for(i in 0...sets.length) {
+				for(cur in sets[i])
+					map.get(cur.key)[i] = true;
+			}
+			
+			var ret = new Array<RedBlack(K,V,Native)>();
+			for(i in 1...(1<<sets.length)) {
+				var set = null;
+				for(n in union) {
+					var valid = true;
+					var mask = 1;
+					for(j in 0...sets.length) {
+						if(map.get(n.key)[j] == ((i&mask)==0)) {
+							valid = false;
+							break;
+						}
+						mask <<= 1;
+					}
+					if(valid) {
+						if(set==null) set = new RedBlack(K,V,Native)();
+						set.insert(n.key,n.data);
+					}
+				}
+				if(set!=null) ret.push(set);
+			}
+			return ret;
+		}
+	}
+	
+	public inline function merge(x:RedBlack(K,V,Native)) {
+		var ret = false;
+		RBIter(i,x,if(insert(i.key,i.data)) ret = true);
+		return ret;
+	}
+	public inline function empty() return root==null
+		
+	public inline function intersects(x:RedBlack(K,V,Native)) {
+		var ret = false;
+		RBIter(i,this,{
+			if(x.has(i.key)) {
+				ret = true;
+				rbbreak;
+			}
+		});
+		return ret;
+	}
+	
+	public inline function has(key:K) {
+		var cur = root;
+		var ret = false;
+		while(cur!=null) {
+			if(EQ(cur.key,key)) { ret = true; break; }
+			else if(LT(key,cur.key))
+				cur = cur.left;
+			else
+				cur = cur.right;
+		}
+		return ret;
+	}
+	
+	public inline function get(key:K) {
+		var node = get_node(key);
+		return if(node==null) null else node.data;
+	}
+	inline function get_node(key:K) {
+		var cur = root;
+		var ret = null;
+		while(cur!=null) {
+			if(EQ(cur.key,key)) { ret = cur; break; }
+			else if(LT(key,cur.key))
+				cur = cur.left;
+			else
+				cur = cur.right;
+		}
+		return ret;
+	}
+	
+	/// @return : true if key existed and thus value was set.
+	public inline function set(key:K, value:V) {
+		var node = get_node(key);
+		if(node==null) return false;
+		else {
+			node.data = value;
+			return true;
+		}
+	}
+	
+	public inline function copy() {
+		var ret = new RedBlack(K,V,Native)();
+		ret.merge(this);
+		return ret;
+	}
+	
+	public inline function insert_all(list:Iterable<{key:K,value:V}>) {
+		for(i in list) insert(i.key,i.value);
+	}
+	
+	/// @return : true if insertion was succesful, false indicates key already existed.
+	public function insert(key:K, value:V) {
+		//ROTATE(x,left,right) = left rotation
+		//ROTATE(x,right,left) = right rotation
+		$(mixin ROTATE(x,L,R) {
+			var y = x.R;
+			x.R = y.L;
+			if(y.L!=null) y.L.parent = x;
+			y.parent = x.parent;
+			if(x.parent==null) root = y;
+			else if(x==x.parent.L)
+				x.parent.L = y;
+			else
+				x.parent.R = y;
+			y.L = x;
+			x.parent = y;
+		});
+		
+		var x = __insert(new RBNode(K,V)(key,value));
+		if(x==null) return false;
+		else {
+			_size++;
+			
+			//rebalancing of tree and satisfaction of red-black properties.
+			while(x!=root && x.parent.colour == RED) {
+				var g = x.parent.parent;
+				$(mixin IF(L,R) {
+					var y = g.R;
+					if(y!=null && y.colour==RED) {
+						x.parent.colour = y.colour = BLACK;
+						g.colour = RED;
+						x = g;
+					}else {
+						if(x==x.parent.R) {
+							x = x.parent;
+							ROTATE(x,L,R);
+						}
+						x.parent.colour = BLACK;
+						g = x.parent.parent;
+						g.colour = RED;
+						ROTATE(g,R,L);
+					}
+				});
+				if(x.parent == g.left) IF(left,right) else IF(right,left);
+			}
+			root.colour = BLACK;
+			return true;
+		}
+	}
+	
+	//normal tree insertion.
+	inline function __insert(n:RBNode(K,V)) {
+		if(root==null) root = n;
+		else {
+			var cur = root;
+			while(true) {
+				if(LT(n.key,cur.key)) {
+					if(cur.left==null) { cur.left = n; n.parent = cur; break; }
+					else cur = cur.left;
+				}else if(GT(n.key,cur.key)) {
+					if(cur.right==null) { cur.right = n; n.parent = cur; break; }
+					else cur = cur.right;
+				}else { n = null; break; }
+			}
+		}
+		return n;
+	}
+	
+	//----------------------------------------------------------------------------------------------
+	//toString                                                                              toString
+	
+	public inline function toString() {
+		var ret = new StringBuf();
+		ret.addChar(123);
+		var fst = true;
+		RBIter(i,this,{
+			if(!fst) ret.addChar(44);
+			fst = false;
+			ret.add(i);
+		});
+		ret.addChar(125);
+		return ret.toString();
+	}
+});

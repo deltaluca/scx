@@ -1,0 +1,84 @@
+package util;
+
+$(import);
+
+///-------------------------------------------------------------------------------------------------
+///Requirements                                                                         Requirements
+/// data type must expose a 'copy' method to perform a deep copy of the element.
+
+///-------------------------------------------------------------------------------------------------
+///inline iteration                                                                 inline iteration
+
+$(mixin global LLIter(i,list,closure) {
+	var llcur = list.head;
+	while(llcur!=null) {
+		var i = llcur.elt;
+		{
+			$(mixin llbreak break);
+			$(mixin llcontinue { llcur = llcur.next; continue; });
+			closure;
+		}
+		llcur = llcur.next;
+	}
+});
+
+///-------------------------------------------------------------------------------------------------
+
+$(define global class LList(T) {
+	public var head:LNode(T);
+	public var size:Int;
+	public function new() {
+		size = 0;
+	}
+	public inline function unshift(x:T) {
+		var node = new LNode(T)(x);
+		size++;
+		node.next = head;
+		head = node;
+	}
+	public inline function shift():T {
+		var node = head;
+		size--;
+		head = head.next;
+		return node.elt;
+	}
+	
+	public inline function copy() {
+		var ret = new LList(T)();
+		var cur = null;
+		LLIter(R, this, cur = ret.insert(cur,R.copy()));
+		return ret;
+	}
+	
+	//insert after n, return node containing n
+	public inline function insert(n:LNode(T),x:T) {
+		if(n==null) { unshift(x); return head; }
+		else {
+			size++;
+			var node = new LNode(T)(x);
+			node.next = n.next;
+			n.next = node;
+			return node;
+		}
+	}
+	
+	//remove after n
+	public inline function remove(n:LNode(T)) {
+		if(n==null) return shift();
+		else {
+			size--;
+			var ret = n.next;
+			n.next = ret.next;
+			return ret.elt;
+		}
+	}
+});
+
+///-------------------------------------------------------------------------------------------------
+
+$(define global class LNode(T) {
+	public var next:LNode(T);
+	public var elt:T;
+	
+	public function new(o:T) elt = o
+});
