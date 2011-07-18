@@ -38,9 +38,6 @@ class Unicode {
 		return ret;
 	}
 	
-	public static inline function concat(a:UStr, x:UStr) {
-		for(i in x) a.push(cast x);
-	}
 	public static inline function substr(str:UStr, pos:Int, ?cnt:Int = -1) {
 		if(cnt==-1) cnt = str.length-pos;
 		var ret = new UStr();

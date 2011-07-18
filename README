@@ -1,0 +1,76 @@
+----------------------------------------------------------------------------------------------------
+scx.UTF: Utilities for handling Unicode strings
+----------------------------------------------------------------------------------------------------
+
+typedef UStr  = Array<WChar>
+typedef WChar = Int
+    
+typedef BStr = Array<Int> //byte array.
+    
+//utf mode
+enum UTF {
+    _utf8
+    _utf16(big_endian:Bool)
+    _utf32(big_endian:Bool)
+}
+    
+//Integer object for decoding
+struct Integer { i:Int , new :: Int -> Void }
+
+class scx.UStr.Unicode {
+    //conversions
+    fromString : String -> UStr
+    string     : UStr -> String
+    
+    //utils
+    compare : UStr -> UStr -> Int //{-1,0,1}
+    substr  : UStr -> pos:Int -> ?cnt:Int=-1 -> UStr
+    
+    wchar : String(single-char) -> WChar
+    
+    utf_mode : UTF = null
+    
+    //decoding a byte array to a UTF string
+    //if UTF=null, then will attempt to first decode a byte order mark from byte array
+    //if UTF!=null, then any byte order mark will be decoded anyways and may override the UTF mode
+    //              you supply
+    decode :: BStr -> ?UTF=null -> UStr
+    
+    //encoding a UTF string to a byte array
+    //if UTF=null, uses utf_mode, else sets utf_mode
+    //if bom is true, a byte order mark is created at start of encoded string
+    encode :: UStr -> ?UTF=null -> ?bom:Bool=true -> BStr
+    
+    //appends byte order mark to given byte array
+    //if UTF=null, uses utf_mode, else sets utf_mode
+    //returns number of appended bytes
+    bom_encode :: BStr -> ?UTF=null -> Int
+    
+    //decodes byte order mark from byte array
+    //sets utf_mode, if utf_mode is null no BOM was found
+    //returns utf_mode after set.
+    bom_decode :: BStr -> Integer -> UTF
+    
+    //encodes a single UTF character with given UTF modem, appending to byte array
+    //if UTF=null, uses utf_mode, else sets utf_mode
+    //returns number of bytes written
+    char_encode :: BStr -> WChar -> ?UTF=null -> Int
+    
+    //decodes a single UTF character with given UTF mode from byte array
+    //if UTF=null, uses utf_mode, else sets utf_mode
+    char_decode :: BStr -> Integer -> ?UTF=null -> WChar
+}
+
+----------------------------------------------------------------------------------------------------
+//EXAMPLE!
+
+creating a byte array corresponding to a utf16 little endian encoded file with BOM
+
+using scx.UStr.Unicode;
+
+var file:BStr = "hello there!".fromString().encode(_utf16(false));
+trace(file); //[254,255,104,0,101,0,108,0,108,0,111,0,32,0,116,0,104,0,101,0,114,0,101,0,33,0]
+var orig:String = file.decode().string(); //decodes BOM also.
+trace(orig); //hello there!
+
+----------------------------------------------------------------------------------------------------
