@@ -1,4 +1,4 @@
-package util;
+package scx;
 
 $(import);
 
@@ -21,7 +21,8 @@ $(import);
 ///-------------------------------------------------------------------------------------------------
 
 // Wrapped, Comparable Array class.
-$(mixin global CArray(T) CArray(T,));
+$(mixin global CArray(T) CArray(T,$(->)));
+$(mixin recCArray(A,B) CArray(A,B)); //no explicit recursion allowed
 $(define global class CArray(T,Native) {
 	public var arr:Array<T>;
 	public function new(?a:Array<T>) arr = if(a==null) new Array<T>() else a
@@ -33,13 +34,13 @@ $(define global class CArray(T,Native) {
 	public inline function get_length() return arr.length
 	
 	public inline function copy() {
-		var ret = new CArray(T)();
+		var ret = new recCArray(T,Native)();
 		for(i in arr) ret.arr.push(i);
 		return ret;
 	}
 	
 	//lexicographical ordering.
-	public inline function compare(x:CArray(T,Native)) {
+	public inline function compare(x:recCArray(T,Native)) {
 		var ret = 0;
 		var i0 = 0; var i1 = 0;
 		while(ret==0) {
@@ -50,9 +51,14 @@ $(define global class CArray(T,Native) {
 				var r0 =   arr[i0];
 				var r1 = x.arr[i1];
 			
+			    $(mixin TEST_Native());
+			    $(mixin TEST_
+      				else if(r0==null && r1!=null) ret = -1;
+				    else if(r1==null && r0!=null) ret =  1;
+				);
+			
 				if(r0==r1) ret = 0;
-				else if(r0==null && r1!=null) ret = -1;
-				else if(r1==null && r0!=null) ret =  1;
+				TEST_`Native
 				else {
 					$(mixin CMP_Native(a,b) (if(a<b) -1 else 1));
 					$(mixin CMP_(a,b) a.compare(b));
@@ -97,6 +103,7 @@ class FaAttr {
 }
 
 //automatum node. Also represents the DFA as a whole as it's entry point.
+$(mixin recFaNode(T) FaNode(T)); //no explicit recursion allowed
 $(define global class FaNode(T) {
 	static var nextId = 0;
 	public var id:Int;
@@ -112,7 +119,7 @@ $(define global class FaNode(T) {
 		id = nextId++;
 	}
 	
-	public inline function compare(x:FaNode(T)) return id - x.id
+	public inline function compare(x:recFaNode(T)) return id - x.id
 	
 	public inline function toString() return Std.string(id)
 	

@@ -1,4 +1,4 @@
-package util;
+package scx;
 
 /// general unicode string handling
 
@@ -301,6 +301,7 @@ class Unicode {
 				$(mixin TEST(N)
 					if(pos.i + N >= str.length) return ERR;
 					var c`N = str[pos.i+N];
+
 					if((c`N&0xc0) != 0x80) return ERR
 				);
 				
