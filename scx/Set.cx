@@ -62,7 +62,6 @@ $(define global class Pair(A,NA,B,NB) {
 ///Set                                                                                           Set
 
 $(mixin global Set(T) Set(T,$(->)));
-$(mixin recSet(A,B) Set(A,B)); //no explicit macro recursion allowed.
 $(define global class Set(T,Native) {
 	//internal map.
 	public var map:RedBlack(T,T,Native);
@@ -83,21 +82,21 @@ $(define global class Set(T,Native) {
 	//can be used to retrieve 'equivalent' item from the set, not necessarly the same by equality.
 	public inline function get(x:T) return map.get(x)
 	
-	public inline function without(x:recSet(T,Native)) {
-		var ret = new recSet(T,Native)();
+	public inline function without(x:Set(T,Native)) {
+		var ret = new Set(T,Native)();
 		ret.map = map.without(x.map);
 		return ret;
 	}
 	
-	public static inline function overlap(list:Iterable<recSet(T,Native)>) {
+	public static inline function overlap(list:Iterable<Set(T,Native)>) {
 		var arg = new Array<RedBlack(T,T,Native)>();
 		for(i in list) arg.push(i.map);
 		
 		var over = RedBlack(T,T,Native).overlap(arg);
 		
-		var ret = new Array<recSet(T,Native)>();
+		var ret = new Array<Set(T,Native)>();
 		for(i in over) {
-			var obj = new recSet(T,Native)();
+			var obj = new Set(T,Native)();
 			obj.map = i;
 			ret.push(obj);
 		}
@@ -111,10 +110,10 @@ $(define global class Set(T,Native) {
 	public inline function insert(value:T) return map.insert(value,value)
 	public inline function has   (value:T) return map.has(value)
 	
-	public inline function merge     (x:recSet(T,Native)) return map.merge(x.map)
-	public inline function intersects(x:recSet(T,Native)) return map.intersects(x.map)
+	public inline function merge     (x:Set(T,Native)) return map.merge(x.map)
+	public inline function intersects(x:Set(T,Native)) return map.intersects(x.map)
 	public inline function copy() {
-		var ret = new recSet(T,Native)();
+		var ret = new Set(T,Native)();
 		ret.map.merge(map);
 		return ret;
 	}
@@ -140,20 +139,19 @@ $(define global class Set(T,Native) {
 		return ret.toString();
 	}
 	
-	public inline function compare(x:recSet(T,Native)) return map.compare(x.map)
+	public inline function compare(x:Set(T,Native)) return map.compare(x.map)
 	
 });
 
 ///-------------------------------------------------------------------------------------------------
 ///RedBlack Node                                                                       RedBlack Node
 
-$(mixin recRBNode(A,B) RBNode(A,B));  //no explicit macro recursion allowed.
 $(define global class RBNode(K,V) {
 	public var colour:Int;
 	
-	public var left  :recRBNode(K,V);
-	public var right :recRBNode(K,V);
-	public var parent:recRBNode(K,V);
+	public var left  :RBNode(K,V);
+	public var right :RBNode(K,V);
+	public var parent:RBNode(K,V);
 	
 	public var key :K;
 	public var data:V;
@@ -167,7 +165,7 @@ $(define global class RBNode(K,V) {
 	}
 	
 	public inline function clone() {
-		var ret = new recRBNode(K,V)(key, data);
+		var ret = new RBNode(K,V)(key, data);
 		ret.colour = colour;
 		return ret;
 	}
@@ -247,7 +245,6 @@ $(mixin global RBIter(i, n,K,V, closure) {
 ///RedBlack Tree                                                                       RedBlack Tree
 
 $(mixin global RedBlack(K,V) RedBlack(K,V,));
-$(mixin recRedBlack(A,B,C) RedBlack(A,B,C)); //no explicit macro recursion allowed.
 $(define global class RedBlack(K,V,Native) {
 	
 	//----------------------------------------------------------------------------------------------
@@ -292,8 +289,8 @@ $(define global class RedBlack(K,V,Native) {
 	
 	//----------------------------------------------------------------------------------------------
 	
-	public inline function without(x:recRedBlack(K,V,Native)) {
-		var ret = new recRedBlack(K,V,Native)();
+	public inline function without(x:RedBlack(K,V,Native)) {
+		var ret = new RedBlack(K,V,Native)();
 		RBIter(i,this, {
 			if(!x.has(i.key)) ret.insert(i.key,i.data);
 		});
@@ -303,7 +300,7 @@ $(define global class RedBlack(K,V,Native) {
 	//----------------------------------------------------------------------------------------------
 	
 	//lexicographical ordering.
-	public inline function compare(x:recRedBlack(K,V,Native)) {
+	public inline function compare(x:RedBlack(K,V,Native)) {
 		var ia = iterator();
 		var ib = x.iterator();
 		
@@ -324,17 +321,17 @@ $(define global class RedBlack(K,V,Native) {
 	//----------------------------------------------------------------------------------------------
 	//set operations                                                                  set operations
 	
-	static public function overlap(list:Iterable<recRedBlack(K,V,Native)>) {
+	static public function overlap(list:Iterable<RedBlack(K,V,Native)>) {
 		var sets = Lambda.array(list);
-		var unioned = new recRedBlack(K,V,Native)();
+		var unioned = new RedBlack(K,V,Native)();
 		for(N in sets) unioned.merge(N);
 		
 		if(sets.length>16) {
 			//give up!
 			
-			var ret = new Array<recRedBlack(K,V,Native)>();
+			var ret = new Array<RedBlack(K,V,Native)>();
 			for(i in unioned) {
-				var rb = new recRedBlack(K,V,Native)();
+				var rb = new RedBlack(K,V,Native)();
 				rb.insert(i.key,i.data);
 				ret.push(rb);
 			}
@@ -355,7 +352,7 @@ $(define global class RedBlack(K,V,Native) {
 					map.get(cur.key)[i] = true;
 			}
 			
-			var ret = new Array<recRedBlack(K,V,Native)>();
+			var ret = new Array<RedBlack(K,V,Native)>();
 			for(i in 1...(1<<sets.length)) {
 				var set = null;
 				for(n in union) {
@@ -369,7 +366,7 @@ $(define global class RedBlack(K,V,Native) {
 						mask <<= 1;
 					}
 					if(valid) {
-						if(set==null) set = new recRedBlack(K,V,Native)();
+						if(set==null) set = new RedBlack(K,V,Native)();
 						set.insert(n.key,n.data);
 					}
 				}
@@ -379,14 +376,14 @@ $(define global class RedBlack(K,V,Native) {
 		}
 	}
 	
-	public inline function merge(x:recRedBlack(K,V,Native)) {
+	public inline function merge(x:RedBlack(K,V,Native)) {
 		var ret = false;
 		RBIter(i,x,if(insert(i.key,i.data)) ret = true);
 		return ret;
 	}
 	public inline function empty() return root==null
 		
-	public inline function intersects(x:recRedBlack(K,V,Native)) {
+	public inline function intersects(x:RedBlack(K,V,Native)) {
 		var ret = false;
 		RBIter(i,this,{
 			if(x.has(i.key)) {
@@ -438,7 +435,7 @@ $(define global class RedBlack(K,V,Native) {
 	}
 	
 	public inline function copy() {
-		var ret = new recRedBlack(K,V,Native)();
+		var ret = new RedBlack(K,V,Native)();
 		ret.merge(this);
 		return ret;
 	}

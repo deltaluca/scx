@@ -22,7 +22,6 @@ $(import);
 
 // Wrapped, Comparable Array class.
 $(mixin global CArray(T) CArray(T,$(->)));
-$(mixin recCArray(A,B) CArray(A,B)); //no explicit recursion allowed
 $(define global class CArray(T,Native) {
 	public var arr:Array<T>;
 	public function new(?a:Array<T>) arr = if(a==null) new Array<T>() else a
@@ -34,13 +33,13 @@ $(define global class CArray(T,Native) {
 	public inline function get_length() return arr.length
 	
 	public inline function copy() {
-		var ret = new recCArray(T,Native)();
+		var ret = new CArray(T,Native)();
 		for(i in arr) ret.arr.push(i);
 		return ret;
 	}
 	
 	//lexicographical ordering.
-	public inline function compare(x:recCArray(T,Native)) {
+	public inline function compare(x:CArray(T,Native)) {
 		var ret = 0;
 		var i0 = 0; var i1 = 0;
 		while(ret==0) {
@@ -103,7 +102,6 @@ class FaAttr {
 }
 
 //automatum node. Also represents the DFA as a whole as it's entry point.
-$(mixin recFaNode(T) FaNode(T)); //no explicit recursion allowed
 $(define global class FaNode(T) {
 	static var nextId = 0;
 	public var id:Int;
@@ -119,7 +117,7 @@ $(define global class FaNode(T) {
 		id = nextId++;
 	}
 	
-	public inline function compare(x:recFaNode(T)) return id - x.id
+	public inline function compare(x:FaNode(T)) return id - x.id
 	
 	public inline function toString() return Std.string(id)
 	

@@ -24,7 +24,6 @@ $(mixin global LLIter(i,list,closure) {
 
 ///-------------------------------------------------------------------------------------------------
 
-$(mixin global recLList(T) LList(T)); //no explicit recursion allowed
 $(define global class LList(T) {
 	public var head:LNode(T);
 	public var size:Int;
@@ -45,7 +44,7 @@ $(define global class LList(T) {
 	}
 	
 	public inline function copy() {
-		var ret = new recLList(T)();
+		var ret = new LList(T)();
 		var cur = null;
 		LLIter(R, this, cur = ret.insert(cur,R.copy()));
 		return ret;
@@ -77,9 +76,8 @@ $(define global class LList(T) {
 
 ///-------------------------------------------------------------------------------------------------
 
-$(mixin recLNode(T) LNode(T)); //no explicit recursion allowed
 $(define global class LNode(T) {
-	public var next:recLNode(T);
+	public var next:LNode(T);
 	public var elt:T;
 	
 	public function new(o:T) elt = o
